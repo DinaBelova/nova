@@ -758,6 +758,17 @@ class ComputeAPI(rpcclient.RpcProxy):
                                     version=version)
         cctxt.cast(ctxt, 'start_instance', instance=instance)
 
+    def wake_up(self, ctxt, instance):
+        if self.client.can_send_version('2.29'):
+            version = '2.29'
+        else:
+            version = '2.0'
+            instance = jsonutils.to_primitive(
+                objects_base.obj_to_primitive(instance))
+        cctxt = self.client.prepare(server=_compute_host(None, instance),
+                                    version=version)
+        cctxt.cast(ctxt, 'wake_up', instance=instance)
+
     def stop_instance(self, ctxt, instance, do_cast=True):
         if self.client.can_send_version('2.29'):
             version = '2.29'

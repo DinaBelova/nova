@@ -71,6 +71,9 @@ _STATE_MAP = {
         task_states.RESIZE_MIGRATED: 'RESIZE',
         task_states.RESIZE_FINISH: 'RESIZE',
     },
+    vm_states.RESERVED: {
+        'default': 'RESERVED'
+    },
     vm_states.BUILDING: {
         'default': 'BUILD',
     },

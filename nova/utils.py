@@ -34,6 +34,7 @@ import sys
 import tempfile
 from xml.sax import saxutils
 
+from climateclient.v1 import client as climate_client
 import eventlet
 import netaddr
 from oslo.config import cfg
@@ -43,6 +44,7 @@ from nova.openstack.common import excutils
 from nova.openstack.common import gettextutils
 from nova.openstack.common.gettextutils import _
 from nova.openstack.common import importutils
+from nova.openstack.common import jsonutils
 from nova.openstack.common import lockutils
 from nova.openstack.common import log as logging
 from nova.openstack.common import processutils
@@ -1133,3 +1135,25 @@ def get_image_from_system_metadata(system_meta):
         image_meta['properties'] = properties
 
     return image_meta
+
+
+def get_climate_client(context):
+    catalog = context.service_catalog
+    user_roles = context.roles
+    climate_endpoints = None
+    for service in catalog:
+        if service['type'] == 'reservation':
+            climate_endpoints = service['endpoints'][0]
+    if not climate_endpoints:
+        raise exception.NotFound('No Climate endpoint found in service '
+                                 'catalog.')
+    climate_url = None
+    if 'admin' in user_roles:
+        climate_url = climate_endpoints.get('adminURL')
+    if climate_url is None:
+        climate_url = climate_endpoints.get('publicURL')
+    if climate_url is None:
+        raise exception.NotFound('No Climate URL found in service '
+                                 'catalog.')
+    climate_cl = climate_client.Client(climate_url, context.auth_token)
+    return climate_cl

@@ -30,6 +30,7 @@ See http://wiki.openstack.org/VMState
 """
 
 ACTIVE = 'active'  # VM is running
+RESERVED = 'reserved'  # VM is reserved
 BUILDING = 'building'  # VM only exists in DB
 PAUSED = 'paused'
 SUSPENDED = 'suspended'  # VM is suspended to disk.

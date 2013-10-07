@@ -1037,10 +1037,38 @@ class ComputeManager(manager.SchedulerDependentManager):
                                  not instance['access_ip_v4'] and
                                  not instance['access_ip_v6'])
 
-                instance = self._spawn(context, instance, image_meta,
-                                       network_info, block_device_info,
-                                       injected_files, admin_password,
-                                       set_access_ip=set_access_ip)
+                reserved = filter_properties.get('scheduler_hints', {})\
+                    .get('reserved')
+                if reserved:
+                        # There is 'reserved' hint in the instance creation
+                        # request. This means instance only should be created
+                        # in DB with correct host, but do not run really.
+                    climate_client = utils.get_climate_client(context)
+                    lease_params = filter_properties\
+                        .get('scheduler_hints', {})\
+                        .get('lease_params', '{}')
+                    lease_params = jsonutils.loads(lease_params)
+                    lease_params.update({
+                        'reservations': [
+                            {'resource_id': instance['uuid'],
+                             'resource_type': 'virtual:instance'}
+                        ],
+                        'events': []
+                    })
+                    climate_client.lease.create(**lease_params)
+                    instance = self._instance_update(
+                        context,
+                        instance['uuid'],
+                        vm_state=vm_states.RESERVED,
+                        task_state=None,
+                        expected_task_state=
+                            task_states.BLOCK_DEVICE_MAPPING
+                    )
+                else:
+                    instance = self._spawn(context, instance, image_meta,
+                                           network_info, block_device_info,
+                                           injected_files, admin_password,
+                                           set_access_ip=set_access_ip)
         except exception.InstanceNotFound:
             # the instance got deleted during the spawn
             # Make sure the async call finishes
@@ -1614,6 +1642,40 @@ class ComputeManager(manager.SchedulerDependentManager):
                     admin_password, is_first_time, node, instance,
                     legacy_bdm_in_spec)
         do_run_instance()
+
+    @wrap_exception()
+    @reverts_task_state
+    @wrap_instance_event
+    @wrap_instance_fault
+    def wake_up(self, context, instance):
+        """Wake up reserved instance by using its params written in DB."""
+        context = context.elevated()
+
+        image_meta = {}
+        if 'image_ref' in instance:
+            image_meta = _get_image_meta(context, instance['image_ref'])
+        network_info = network_model.NetworkInfoAsyncWrapper(
+            self.network_api.get_instance_nw_info,
+            context, instance,
+        )
+        bdms = self.conductor_api.block_device_mapping_get_all_by_instance(
+            context, instance
+        )
+        block_device_info = self._prep_block_device(context, instance, bdms)
+
+        # do not support injected files, admin password and set_access_ip
+        # because they are not saved in DB
+        injected_files = None
+        admin_password = None
+        set_access_ip = None
+
+        @utils.synchronized(instance['uuid'])
+        def do_wake_up():
+            self._spawn(context, instance, image_meta,
+                        network_info, block_device_info,
+                        injected_files, admin_password,
+                        set_access_ip=set_access_ip)
+        do_wake_up()
 
     def _try_deallocate_network(self, context, instance,
                                 requested_networks=None):

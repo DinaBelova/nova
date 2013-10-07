@@ -1644,6 +1644,16 @@ class API(base.Base):
         #                 availability_zone isn't used by run_instance.
         self.compute_rpcapi.start_instance(context, instance)
 
+    def wake_up(self, context, instance):
+        """Wake up reserved instance."""
+        LOG.debug(_("Going to wake up instance"), instance=instance)
+
+        instance = self.update(context, instance,
+                               task_state=task_states.BLOCK_DEVICE_MAPPING,
+                               expected_task_state=None)
+        self._record_action_start(context, instance, instance_actions.WAKE_UP)
+        self.compute_rpcapi.wake_up(context, instance)
+
     #NOTE(bcwaldon): no policy check here since it should be rolled in to
     # search_opts in get_all
     def get_active_by_window(self, context, begin, end=None, project_id=None):
